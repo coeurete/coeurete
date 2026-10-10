@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Coeurete · Commandes</title>
+<style>
+  :root{--ink:#17120F;--paper:#FBF7EE;--line:#D8D0C0;--red:#E32F3B;--sun:#FFD84A}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:20px}
+  h1{font-size:1.6rem;margin:0 0 4px}
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:16px 0}
+  input,button,select{font:inherit;padding:10px 14px;border:2px solid var(--ink);border-radius:8px;background:#fff;color:var(--ink)}
+  button{background:var(--sun);font-weight:600;cursor:pointer}
+  button.ghost{background:#fff}
+  .msg{color:var(--red);min-height:1.5em}
+  .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
+  .actions input{flex:1 1 220px}
+  button[disabled]{opacity:.45;cursor:not-allowed}
+  .order{background:#fff;border:2px solid var(--ink);box-shadow:4px 4px 0 var(--ink);padding:16px;margin:0 0 18px;max-width:900px}
+  .order header{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;justify-content:space-between;border-bottom:1px dashed var(--line);padding-bottom:8px;margin-bottom:10px}
+  .order h2{font-size:1.1rem;margin:0}
+  .tag{font-size:.8rem;border:1.5px solid var(--ink);border-radius:999px;padding:2px 10px;background:var(--sun)}
+  .tag.card{background:#A8CDEF}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+  .item{border:1px solid var(--line);padding:10px;margin-top:8px}
+  .q{font-family:Georgia,serif;font-style:italic;font-size:1.25rem;margin:4px 0}
+  small{color:#5c564d}
+  table{border-collapse:collapse}
+  td{padding:2px 14px 2px 0;vertical-align:top}
+</style>
+</head>
+<body>
+<h1>Commandes Coeurete</h1>
+<small>Les citations à imprimer sont dans chaque commande.</small>
+<div class="bar">
+  <label for="tok">Mot de passe</label>
+  <input id="tok" type="password" autocomplete="current-password">
+  <button id="go" type="button">Voir les commandes</button>
+  <button id="csv" type="button" class="ghost" hidden>Exporter en CSV</button>
+</div>
+<p class="msg" id="msg" role="status"></p>
+<div id="list"></div>
+
+<script>
+(function(){
+  var list=document.getElementById('list'), msg=document.getElementById('msg'), csvBtn=document.getElementById('csv'), data=[];
+  var STATUS={nouvelle:'Nouvelle · à préparer',en_attente_paiement:'Carte · en attente de paiement',payee:'Payée par carte · à préparer',expediee:'Expédiée',livree:'Livrée',annulee:'Annulée',erreur_paiement:'Erreur de paiement carte'};
+  function el(tag,cls,text){var e=document.createElement(tag); if(cls)e.className=cls; if(text!=null)e.textContent=text; return e;}
+  function money(n,c){try{return new Intl.NumberFormat('fr-FR',{style:'currency',currency:c,minimumFractionDigits:0}).format(n);}catch(e){return n+' '+c;}}
+
+  function render(){
+    list.textContent='';
+    if(!data.length){ list.appendChild(el('p',null,'Aucune commande pour le moment.')); return; }
+    data.forEach(function(o){
+      var box=el('article','order'), head=el('header');
+      head.appendChild(el('h2',null,o.id));
+      var right=el('div'); var tag=el('span','tag'+(o.payment.method==='card'?' card':''),STATUS[o.status]||o.status); right.appendChild(tag);
+      head.appendChild(right); box.appendChild(head);
+      var g=el('div','grid');
+      var c=el('div'); c.appendChild(el('strong',null,o.customer.fullName));
+      [['Téléphone',o.customer.phone],['E-mail',o.customer.email||'-'],['Adresse',o.customer.address+', '+o.customer.city+', '+o.customer.country],['Précisions',o.customer.notes||'-']].forEach(function(r){var p=el('div'); p.appendChild(el('small',null,r[0]+' : ')); p.appendChild(document.createTextNode(r[1])); c.appendChild(p);});
+      g.appendChild(c);
+      var d=el('div'); d.appendChild(el('div',null,o.delivery.label+' ('+o.delivery.delay+')'));
+      d.appendChild(el('div',null,'Paiement : '+o.payment.label));
+      d.appendChild(el('div',null,'Sous-total '+money(o.subtotal,o.currency)+' · Livraison '+(o.shipping?money(o.shipping,o.currency):'offerte')));
+      d.appendChild(el('strong',null,'Total '+money(o.total,o.currency)));
+      d.appendChild(el('div',null,'Reçue le '+new Date(o.createdAt).toLocaleString('fr-FR')));
+      g.appendChild(d); box.appendChild(g);
+      o.items.forEach(function(i){
+        var it=el('div','item');
+        it.appendChild(el('div',null,i.name+' · '+i.colorName+' · '+i.size+(i.emb?' · broderie cœur':'')));
+        it.appendChild(el('div','q','« '+i.quote+' »'));
+        box.appendChild(it);
+      });
+      var act=el('div','actions');
+      var tn=el('input'); tn.type='text'; tn.placeholder='N° de suivi transporteur (facultatif)'; tn.value=o.trackingNumber||''; tn.setAttribute('aria-label','Numéro de suivi pour '+o.id);
+      act.appendChild(tn);
+      [['expediee','Marquer expédiée (envoie un e-mail)'],['livree','Marquer livrée'],['annulee','Annuler']].forEach(function(a){
+        var b=el('button',a[0]==='annulee'?'ghost':'',a[1]); b.type='button';
+        if(o.status===a[0]) b.disabled=true;
+        b.addEventListener('click',function(){ setStatus(o.id,a[0],tn.value,b); });
+        act.appendChild(b);
+      });
+      box.appendChild(act);
+      list.appendChild(box);
+    });
+  }
+
+  function setStatus(id,status,tracking,btn){
+    btn.disabled=true; msg.textContent='';
+    fetch('/api/admin/orders/'+encodeURIComponent(id),{method:'PATCH',headers:{'content-type':'application/json','x-admin-token':document.getElementById('tok').value},body:JSON.stringify({status:status,trackingNumber:tracking})})
+      .then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error((j.error&&j.error.message)||'Erreur'); return j; }); })
+      .then(function(j){
+        if(j.email){ msg.style.color=j.email.sent?'#1d7a3a':'#E32F3B'; msg.textContent=j.email.sent?'E-mail d\u2019expédition envoyé au client.':(j.email.mode==='preview'?'Statut mis à jour. E-mail non envoyé (SMTP non configuré) : voir data/outbox.':'Statut mis à jour, mais l\u2019e-mail n\u2019a pas pu partir.'); }
+        else { msg.style.color=''; msg.textContent='Statut mis à jour.'; }
+        load(true);
+      })
+      .catch(function(e){ msg.style.color='#E32F3B'; msg.textContent=e.message; btn.disabled=false; });
+  }
+
+  function load(keepMsg){
+    if(keepMsg!==true){ msg.textContent=''; msg.style.color=''; }
+    fetch('/api/admin/orders',{headers:{'x-admin-token':document.getElementById('tok').value}})
+      .then(function(r){ if(r.status===401) throw new Error('Mot de passe incorrect.'); if(!r.ok) throw new Error('Impossible de charger les commandes.'); return r.json(); })
+      .then(function(j){ data=j.orders; csvBtn.hidden=!data.length; render(); })
+      .catch(function(e){ msg.textContent=e.message; });
+  }
+  document.getElementById('go').addEventListener('click',function(){load();});
+  document.getElementById('tok').addEventListener('keydown',function(e){ if(e.key==='Enter') load(); });
+
+  csvBtn.addEventListener('click',function(){
+    function q(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';}
+    var rows=[['commande','date','statut','nom','telephone','email','ville','adresse','livraison','paiement','total','modele','couleur','taille','broderie','citation']];
+    data.forEach(function(o){o.items.forEach(function(i){rows.push([o.id,o.createdAt,o.status,o.customer.fullName,o.customer.phone,o.customer.email,o.customer.city,o.customer.address,o.delivery.label,o.payment.label,o.total,i.name,i.colorName,i.size,i.emb?'oui':'non',i.quote]);});});
+    var csv='﻿'+rows.map(function(r){return r.map(q).join(';');}).join('\n');
+    var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download='commandes-coeurete.csv'; a.click();
+  });
+})();
+</script>
+</body>
+</html>
